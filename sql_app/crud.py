@@ -1,6 +1,58 @@
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from . import models, schemas
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+
+SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    # db_user = models.Token(
+    #     email=data.email, access_token=encoded_jwt, token_type='beare')
+    return to_encode
+
+
+def get_user(db: Session, user_id: int):
+    return db.query(models.User).filter(models.User.id == user_id).first()
+
+
+def get_users(db: Session, skip: int = 0, limit: int = 100):
+    return db.query(models.User).offset(skip).limit(limit).all()
+
+
+def get_user_by_email(db: Session, email: str):
+    return db.query(models.User).filter(models.User.email == email).first()
+
+
+def get_user_by_email_password(db: Session, email: str, password: str):
+    # fake_hashed_password = pwd_context.hash(password)
+    db_user = db.query(models.User).filter(models.User.email == email).first()
+    if pwd_context.verify(password, db_user.hashed_password):
+        return db_user
+
+
+def create_user(db: Session, user: schemas.UserCreate):
+    fake_hashed_password = pwd_context.hash(user.password)
+
+    db_user = models.User(
+        email=user.email, hashed_password=fake_hashed_password)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
 
 
 def get_poi_by_types(db: Session, type: str):
@@ -18,11 +70,14 @@ def create_poi(db: Session, poi: schemas.PoiCreate):
 def get_poi(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.Poi).offset(skip).limit(limit).all()
 
+
 def drop_poi(db: Session):
     db.query(models.Poi).delete()
     db.commit()
     db.close()
     return {"message": "All data from the table has been dropped."}
+
+
 def search_poi(db: Session, poi: schemas.PoiSearch):
     # Create a base query
     query = db.query(models.Poi)
@@ -34,17 +89,21 @@ def search_poi(db: Session, poi: schemas.PoiSearch):
     if poi.sort_id != 'string':
         filter_conditions.append(models.Poi.sort_id.like(f"%{poi.sort_id}%"))
     if poi.poi_n_eng != 'string':
-        filter_conditions.append(models.Poi.poi_n_eng.like(f"%{poi.poi_n_eng}%"))
+        filter_conditions.append(
+            models.Poi.poi_n_eng.like(f"%{poi.poi_n_eng}%"))
     if poi.types != 'string':
         filter_conditions.append(models.Poi.types.like(f"%{poi.types}%"))
     if poi.st_n_eng != 'string':
         filter_conditions.append(models.Poi.st_n_eng.like(f"%{poi.st_n_eng}%"))
     if poi.ward_n_eng != 'string':
-        filter_conditions.append(models.Poi.ward_n_eng.like(f"%{poi.ward_n_eng}%"))
+        filter_conditions.append(
+            models.Poi.ward_n_eng.like(f"%{poi.ward_n_eng}%"))
     if poi.tsp_n_eng != 'string':
-        filter_conditions.append(models.Poi.tsp_n_eng.like(f"%{poi.tsp_n_eng}%"))
+        filter_conditions.append(
+            models.Poi.tsp_n_eng.like(f"%{poi.tsp_n_eng}%"))
     if poi.dist_n_eng != 'string':
-        filter_conditions.append(models.Poi.dist_n_eng.like(f"%{poi.dist_n_eng}%"))
+        filter_conditions.append(
+            models.Poi.dist_n_eng.like(f"%{poi.dist_n_eng}%"))
     if poi.hn_eng != 'string':
         filter_conditions.append(models.Poi.hn_eng.like(f"%{poi.hn_eng}%"))
 
@@ -55,7 +114,6 @@ def search_poi(db: Session, poi: schemas.PoiSearch):
     # Execute the query and return the results
     result = query.all()
     return result
-
 
 
 def read_township(township_name: str):

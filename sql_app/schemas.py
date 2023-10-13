@@ -51,3 +51,32 @@ class Poi(PoiBase):
 
     class Config:
         orm_mode = True
+
+class UserBase(BaseModel):
+    email: str
+
+
+class UserCreate(UserBase):
+    password: str
+
+
+class User(UserBase):
+    id: int
+    is_active: bool
+
+    class Config:
+        orm_mode = True
+
+class TokenBase(BaseModel):
+    access_token: str
+
+
+class TokenCreate(TokenBase):
+    token_type: str
+
+
+class Token(TokenBase):
+    id: int
+
+    class Config:
+        orm_mode = True

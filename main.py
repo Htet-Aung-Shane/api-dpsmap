@@ -2,15 +2,15 @@ from typing import Union, Annotated
 
 from sql_app import crud, models, schemas
 # from mysql_app.database import get_poi
-
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sql_app.database import SessionLocal, engine
 from fastapi import FastAPI, Query, Path, Depends, File, Form, UploadFile, HTTPException
+from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
 import json
 import pandas as pd
 import io
-
 
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI(
@@ -29,6 +29,7 @@ app = FastAPI(
         "url": "https://www.apache.org/licenses/LICENSE-2.0.html",
     },
 )
+
 
 origins = [
     "http://localhost:8080",
@@ -50,10 +51,35 @@ def get_db():
     finally:
         db.close()
 
+# usercode
+
 
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
+
+
+@app.post("/users/", response_model=schemas.User)
+def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    db_user = crud.get_user_by_email(db, email=user.email)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    return crud.create_user(db=db, user=user)
+
+
+@app.get("/user/get")
+def get_user(email: str, password: str, db: Session = Depends(get_db)):
+    db_user = crud.get_user_by_email_password(
+        db, email=email, password=password)
+    if db_user:
+        access_token_expires = timedelta(minutes=30)
+        access_token = crud.create_access_token(
+        data={"sub": db_user.email}, expires_delta=access_token_expires
+        )
+        return {"access_token": access_token, "token_type": "bearer"}
+    else:
+        raise HTTPException(
+            status_code=400, detail="Email and password did not match")
 
 
 @app.get("/city/{city_name}")
@@ -69,6 +95,7 @@ def read_city(city_name: Annotated[str, Path(regex="Yangon", title="We still onl
         return {"error": "File not found"}
     except Exception as e:
         return {"error": f"An error occurred: {str(e)}"}
+
 
 @app.get("/city/{city_name}/township/{township_name}")
 def read_city_township(city_name: Annotated[str, Path(regex="Yangon", title="We still only accept yangon")], township_name: Union[str, None] = None):
@@ -86,6 +113,7 @@ def read_city_township(city_name: Annotated[str, Path(regex="Yangon", title="We 
     except Exception as e:
         return {"error": f"An error occurred: {str(e)}"}
 
+
 @app.post("/poi", response_model=schemas.PoiCreate)
 def create_poi(poi: schemas.PoiCreate, db: Session = Depends(get_db)):
     return crud.create_poi(db=db, poi=poi)
@@ -95,9 +123,10 @@ def create_poi(poi: schemas.PoiCreate, db: Session = Depends(get_db)):
 def read_items(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     return crud.get_poi(db, skip=skip, limit=limit)
 
+
 @app.post("/poi/search")
-def read_poi(poi: schemas.PoiSearch, db: Session = Depends(get_db) ):
-    return crud.search_poi(db=db,poi=poi)
+def read_poi(poi: schemas.PoiSearch, db: Session = Depends(get_db)):
+    return crud.search_poi(db=db, poi=poi)
 
 
 @app.post("/poi/uploadfast")
@@ -146,11 +175,9 @@ async def fetch_file(
                 "verify_date": str(row_dict['Verify_date']),
                 "poi_picture_name": str(row_dict['POI_Picture_Name']),
                 "project": str(row_dict['Project'])
-            }            
+            }
             crud.create_poi(db=db, poi=data_dict)
-        return {'Message':'Import Success'}
+        return {'Message': 'Import Success'}
 
     except Exception as e:
         return {'Error': e}
-
-
