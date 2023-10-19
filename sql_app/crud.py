@@ -5,14 +5,14 @@ from . import models, schemas
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 
-SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
+SECRET_KEY = "e020861c609c97b3704e63dbf5d8132e53a0369993e797f444061b2fc91dba4e"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None):
+def create_access_token(db: Session, data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
@@ -20,14 +20,17 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
         expire = datetime.utcnow() + timedelta(minutes=15)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    # db_user = models.Token(
-    #     email=data.email, access_token=encoded_jwt, token_type='beare')
-    return to_encode
+    db_user = models.Token(
+        email=data['sub'], access_token=encoded_jwt, token_type='bearer')
+    db.add(db_user)
+    db.commit()
+    print(data['sub'])
+    return encoded_jwt
 
-
+def get_token(db: Session,token: str):
+    return db.query(models.User).filter(models.Token.access_token == token).first()
 def get_user(db: Session, user_id: int):
     return db.query(models.User).filter(models.User.id == user_id).first()
-
 
 def get_users(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.User).offset(skip).limit(limit).all()
@@ -39,9 +42,10 @@ def get_user_by_email(db: Session, email: str):
 
 def get_user_by_email_password(db: Session, email: str, password: str):
     # fake_hashed_password = pwd_context.hash(password)
-    db_user = db.query(models.User).filter(models.User.email == email).first()
-    if pwd_context.verify(password, db_user.hashed_password):
-        return db_user
+    db_user = db.query(models.User).filter(models.User.email == email,models.User.is_active == True).first()
+    if db_user:
+        if pwd_context.verify(password, db_user.hashed_password):
+            return db_user
 
 
 def create_user(db: Session, user: schemas.UserCreate):

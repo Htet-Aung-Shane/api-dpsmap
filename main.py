@@ -5,7 +5,7 @@ from sql_app import crud, models, schemas
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sql_app.database import SessionLocal, engine
-from fastapi import FastAPI, Query, Path, Depends, File, Form, UploadFile, HTTPException
+from fastapi import FastAPI, Query, Path, Depends, File, Form, UploadFile, HTTPException, Header
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
 import json
@@ -68,18 +68,18 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/user/get")
-def get_user(email: str, password: str, db: Session = Depends(get_db)):
+def get_token(email: str, password: str, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email_password(
         db, email=email, password=password)
     if db_user:
         access_token_expires = timedelta(minutes=30)
         access_token = crud.create_access_token(
-        data={"sub": db_user.email}, expires_delta=access_token_expires
+        db, data={"sub": db_user.email}, expires_delta=access_token_expires
         )
         return {"access_token": access_token, "token_type": "bearer"}
     else:
         raise HTTPException(
-            status_code=400, detail="Email and password did not match")
+            status_code=400, detail="Email and password did not match or Is not Activate")
 
 
 @app.get("/city/{city_name}")
@@ -125,59 +125,69 @@ def read_items(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
 
 
 @app.post("/poi/search")
-def read_poi(poi: schemas.PoiSearch, db: Session = Depends(get_db)):
-    return crud.search_poi(db=db, poi=poi)
+def read_poi(token: Annotated[str | None, Header()], poi: schemas.PoiSearch, db: Session = Depends(get_db)):
+    token_exit = crud.get_token(db=db, token=token)
+    if not token_exit:
+        raise HTTPException(
+                status_code=400, detail="Token Validation Failed")
+    else:
+        return crud.search_poi(db=db, poi=poi)
 
 
-@app.post("/poi/uploadfast")
+@app.post("/poi/uploadfile")
 async def fetch_file(
-    file: Annotated[UploadFile, File()], db: Session = Depends(get_db)
+    token: Annotated[str | None, Header()],file: Annotated[UploadFile, File()], db: Session = Depends(get_db)
 ):
-    try:
-        if not file.filename.endswith('.csv'):
-            raise HTTPException(
-                status_code=400, detail="Only CSV Files are allowed")
-        csv_data = await file.read()
+    token_exit = crud.get_token(db=db, token=token)
+    if not token_exit:
+        raise HTTPException(
+                status_code=400, detail="Token Validation Failed")
+    else:
+        try:
+            if not file.filename.endswith('.csv'):
+                raise HTTPException(
+                    status_code=400, detail="Only CSV Files are allowed")
+            csv_data = await file.read()
 
-        df = pd.read_csv(io.StringIO(csv_data.decode('utf-8')))
-        row_dicts = []
-        crud.drop_poi(db=db)
-        for index, row in df.iterrows():
-            # csv_dict = df.iloc[5].to_dict()
-            row_dict = row.to_dict()
-            data_dict = {
-                "sort_id": str(row_dict['Sort_ID']),
-                "dps_id": str(row_dict['DPS_ID']),
-                "source_id": str(row_dict['Source_ID']),
-                "uid": str(row_dict['UID']),
-                "poi_n_eng": str(row_dict['POI_N_Eng']),
-                "poi_n_myn": str(row_dict['POI_N_Myn3']),
-                "types": str(row_dict['Type']),
-                "type_code": str(row_dict['Type_Code']),
-                "sub_type": str(row_dict['Sub_Type']),
-                "sub_type_code": str(row_dict['Sub_Type_Code']),
-                "postal_code": str(row_dict['Postal_Code']),
-                "st_n_eng": str(row_dict['St_N_Eng']),
-                "st_n_myn": str(row_dict['St_N_Myn3']),
-                "ward_n_eng": str(row_dict['Ward_N_Eng']),
-                "ward_n_myn": str(row_dict['Ward_N_Myn3']),
-                "tsp_n_eng": str(row_dict['Tsp_N_Eng']),
-                "tsp_n_myn": str(row_dict['Tsp_N_Myn3']),
-                "dist_n_eng": str(row_dict['Dist_N_Eng']),
-                "dist_n_myn": str(row_dict['Dist_N_Myn3']),
-                "s_r_n_eng": str(row_dict['S_R_N_Eng']),
-                "s_r_n_myn": str(row_dict['S_R_N_Myn3']),
-                "hn_eng": str(row_dict['HN_Eng']),
-                "hn_myn": str(row_dict['HN_Myn3']),
-                "longitude": str(row_dict['Longitude']),
-                "latitude": str(row_dict['Latitude']),
-                "remark": str(row_dict['Remark']),
-                "verify_date": str(row_dict['Verify_date']),
-                "poi_picture_name": str(row_dict['POI_Picture_Name']),
-                "project": str(row_dict['Project'])
-            }
-            crud.create_poi(db=db, poi=data_dict)
-        return {'Message': 'Import Success'}
+            df = pd.read_csv(io.StringIO(csv_data.decode('utf-8')))
+            row_dicts = []
+            crud.drop_poi(db=db)
+            for index, row in df.iterrows():
+                # csv_dict = df.iloc[5].to_dict()
+                row_dict = row.to_dict()
+                data_dict = {
+                    "sort_id": str(row_dict['Sort_ID']),
+                    "dps_id": str(row_dict['DPS_ID']),
+                    "source_id": str(row_dict['Source_ID']),
+                    "uid": str(row_dict['UID']),
+                    "poi_n_eng": str(row_dict['POI_N_Eng']),
+                    "poi_n_myn": str(row_dict['POI_N_Myn3']),
+                    "types": str(row_dict['Type']),
+                    "type_code": str(row_dict['Type_Code']),
+                    "sub_type": str(row_dict['Sub_Type']),
+                    "sub_type_code": str(row_dict['Sub_Type_Code']),
+                    "postal_code": str(row_dict['Postal_Code']),
+                    "st_n_eng": str(row_dict['St_N_Eng']),
+                    "st_n_myn": str(row_dict['St_N_Myn3']),
+                    "ward_n_eng": str(row_dict['Ward_N_Eng']),
+                    "ward_n_myn": str(row_dict['Ward_N_Myn3']),
+                    "tsp_n_eng": str(row_dict['Tsp_N_Eng']),
+                    "tsp_n_myn": str(row_dict['Tsp_N_Myn3']),
+                    "dist_n_eng": str(row_dict['Dist_N_Eng']),
+                    "dist_n_myn": str(row_dict['Dist_N_Myn3']),
+                    "s_r_n_eng": str(row_dict['S_R_N_Eng']),
+                    "s_r_n_myn": str(row_dict['S_R_N_Myn3']),
+                    "hn_eng": str(row_dict['HN_Eng']),
+                    "hn_myn": str(row_dict['HN_Myn3']),
+                    "longitude": str(row_dict['Longitude']),
+                    "latitude": str(row_dict['Latitude']),
+                    "remark": str(row_dict['Remark']),
+                    "verify_date": str(row_dict['Verify_date']),
+                    "poi_picture_name": str(row_dict['POI_Picture_Name']),
+                    "project": str(row_dict['Project'])
+                }
+                crud.create_poi(db=db, poi=data_dict)
+            return {'Message': 'Import Success'}
 
-    except Exception as e:
-        return {'Error': e}
+        except Exception as e:
+            return {'Error': e}
