@@ -5,7 +5,7 @@ from sql_app import crud, models, schemas
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sql_app.database import SessionLocal, engine
-from fastapi import FastAPI, Query, Path, Depends, File, Form, UploadFile, HTTPException, Header
+from fastapi import FastAPI, Query, Path, Depends, File, Form, UploadFile, HTTPException, Header, status
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
 import json
@@ -16,7 +16,7 @@ models.Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="POIApp",
     description="This is an api app for township api and poi",
-    summary="Deadpool's favorite app. Nuff said.",
+    summary="Developed my HAS.",
     version="0.0.1",
     terms_of_service="https://dpsmap.com/terms/",
     contact={
@@ -52,19 +52,43 @@ def get_db():
         db.close()
 
 # usercode
+# check user authentication
+async def get_current_user(email: str, password: str, db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )    
+    user = crud.get_user_by_email_password(
+        db, email=email, password=password)
+    if user is None:
+        raise credentials_exception
+    return user
+
+async def get_current_active_user(
+    current_user: Annotated[schemas.User, Depends(get_current_user)]
+):
+    if current_user.is_active != True:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
 
 
 @app.get("/")
-def read_root():
-    return {"Hello": "World"}
+def read_root(current_user: Annotated[schemas.User, Depends(get_current_active_user)]):
+    return current_user
 
 
 @app.post("/users/", response_model=schemas.User)
-def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    db_user = crud.get_user_by_email(db, email=user.email)
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    return crud.create_user(db=db, user=user)
+def create_user(token: Annotated[str | None, Header()], user: schemas.UserCreate, db: Session = Depends(get_db)):
+    token_exit = crud.check_supertoken(db=db, token=token)
+    if not token_exit:
+        raise HTTPException(
+                status_code=400, detail="Token Validation Failed")
+    else:
+        db_user = crud.get_user_by_email(db, email=user.email)
+        if db_user:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        return crud.create_user(db=db, user=user)
 
 
 @app.get("/user/get")
@@ -72,11 +96,15 @@ def get_token(email: str, password: str, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email_password(
         db, email=email, password=password)
     if db_user:
-        access_token_expires = timedelta(minutes=30)
-        access_token = crud.create_access_token(
-        db, data={"sub": db_user.email}, expires_delta=access_token_expires
-        )
-        return {"access_token": access_token, "token_type": "bearer"}
+        exit_token = crud.get_token_by_email(db=db, email=email)
+        if exit_token:
+            return exit_token
+        else:
+            access_token_expires = timedelta(minutes=30)
+            access_token = crud.create_access_token(
+            db, data={"sub": db_user.email}, expires_delta=access_token_expires
+            )
+            return {"access_token": access_token, "token_type": "bearer"}
     else:
         raise HTTPException(
             status_code=400, detail="Email and password did not match or Is not Activate")
@@ -115,13 +143,23 @@ def read_city_township(city_name: Annotated[str, Path(regex="Yangon", title="We 
 
 
 @app.post("/poi", response_model=schemas.PoiCreate)
-def create_poi(poi: schemas.PoiCreate, db: Session = Depends(get_db)):
-    return crud.create_poi(db=db, poi=poi)
+def create_poi(token: Annotated[str | None, Header()], poi: schemas.PoiCreate, db: Session = Depends(get_db)):
+    token_exit = crud.check_supertoken(db=db, token=token)
+    if not token_exit:
+        raise HTTPException(
+                status_code=400, detail="Token Validation Failed")
+    else:
+        return crud.create_poi(db=db, poi=poi)
 
 
 @app.get("/poi", response_model=list[schemas.Poi])
-def read_items(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return crud.get_poi(db, skip=skip, limit=limit)
+def read_items(token: Annotated[str | None, Header()],skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    token_exit = crud.get_token(db=db, token=token)
+    if not token_exit:
+        raise HTTPException(
+                status_code=400, detail="Token Validation Failed")
+    else:
+        return crud.get_poi(db, skip=skip, limit=limit)
 
 
 @app.post("/poi/search")
@@ -138,7 +176,7 @@ def read_poi(token: Annotated[str | None, Header()], poi: schemas.PoiSearch, db:
 async def fetch_file(
     token: Annotated[str | None, Header()],file: Annotated[UploadFile, File()], db: Session = Depends(get_db)
 ):
-    token_exit = crud.get_token(db=db, token=token)
+    token_exit = crud.check_supertoken(db=db, token=token)
     if not token_exit:
         raise HTTPException(
                 status_code=400, detail="Token Validation Failed")

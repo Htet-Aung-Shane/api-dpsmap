@@ -18,6 +18,7 @@ class Token(Base):
     
     email = Column(String, unique=True, index=True)
     access_token = Column(String, index=True)
+    is_super = Column(Boolean, default=False)
     token_type = Column(String, index=True)
 class Poi(Base):
     __tablename__ = "pois"

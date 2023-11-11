@@ -27,8 +27,15 @@ def create_access_token(db: Session, data: dict, expires_delta: timedelta | None
     print(data['sub'])
     return encoded_jwt
 
+def get_token_by_email(db: Session,email: str):
+    return db.query(models.Token).filter(models.Token.email == email).first()
+
 def get_token(db: Session,token: str):
     return db.query(models.User).filter(models.Token.access_token == token).first()
+
+def check_supertoken(db: Session,token: str):
+    return db.query(models.User).filter(models.Token.access_token == token , models.Token.is_super == True).first()
+
 def get_user(db: Session, user_id: int):
     return db.query(models.User).filter(models.User.id == user_id).first()
 

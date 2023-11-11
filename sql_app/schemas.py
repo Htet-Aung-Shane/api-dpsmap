@@ -77,6 +77,7 @@ class TokenCreate(TokenBase):
 
 class Token(TokenBase):
     id: int
+    super_access: bool
 
     class Config:
         orm_mode = True
