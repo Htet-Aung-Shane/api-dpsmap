@@ -79,16 +79,16 @@ def read_root(current_user: Annotated[schemas.User, Depends(get_current_active_u
 
 
 @app.post("/users/", response_model=schemas.User)
-def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    #token_exit = crud.check_supertoken(db=db, token=token)
-    # if not token_exit:
-    #     raise HTTPException(
-    #             status_code=400, detail="Token Validation Failed")
-    # else:
-    db_user = crud.get_user_by_email(db, email=user.email)
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    return crud.create_user(db=db, user=user)
+def create_user(token: Annotated[str | None, Header()], user: schemas.UserCreate, db: Session = Depends(get_db)):
+    token_exit = crud.check_supertoken(db=db, token=token)
+    if not token_exit:
+        raise HTTPException(
+                status_code=400, detail="Token Validation Failed")
+    else:
+        db_user = crud.get_user_by_email(db, email=user.email)
+        if db_user:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        return crud.create_user(db=db, user=user)
 
 
 @app.get("/user/get")
