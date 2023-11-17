@@ -80,7 +80,7 @@ def read_root(current_user: Annotated[schemas.User, Depends(get_current_active_u
 
 @app.post("/users/", response_model=schemas.User)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    token_exit = crud.check_supertoken(db=db, token=token)
+    #token_exit = crud.check_supertoken(db=db, token=token)
     # if not token_exit:
     #     raise HTTPException(
     #             status_code=400, detail="Token Validation Failed")
