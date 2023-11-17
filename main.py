@@ -79,16 +79,16 @@ def read_root(current_user: Annotated[schemas.User, Depends(get_current_active_u
 
 
 @app.post("/users/", response_model=schemas.User)
-def create_user(token: Annotated[str | None, Header()], user: schemas.UserCreate, db: Session = Depends(get_db)):
+def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     token_exit = crud.check_supertoken(db=db, token=token)
-    if not token_exit:
-        raise HTTPException(
-                status_code=400, detail="Token Validation Failed")
-    else:
-        db_user = crud.get_user_by_email(db, email=user.email)
-        if db_user:
-            raise HTTPException(status_code=400, detail="Email already registered")
-        return crud.create_user(db=db, user=user)
+    # if not token_exit:
+    #     raise HTTPException(
+    #             status_code=400, detail="Token Validation Failed")
+    # else:
+    db_user = crud.get_user_by_email(db, email=user.email)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    return crud.create_user(db=db, user=user)
 
 
 @app.get("/user/get")
@@ -128,8 +128,7 @@ def read_city(city_name: Annotated[str, Path(regex="Yangon", title="We still onl
 @app.get("/city/{city_name}/township/{township_name}")
 def read_city_township(city_name: Annotated[str, Path(regex="Yangon", title="We still only accept yangon")], township_name: Union[str, None] = None):
 
-    json_file_path = crud.read_township(township_name=None)
-
+    json_file_path = crud.read_township(township_name)
     try:
         with open(json_file_path, "r") as file:
             # Load the JSON data from the file
