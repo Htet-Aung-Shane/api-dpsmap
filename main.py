@@ -5,13 +5,15 @@ from sql_app import crud, models, schemas
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sql_app.database import SessionLocal, engine
-from fastapi import FastAPI, Query, Path, Depends, File, Form, UploadFile, HTTPException, Header, status
+from fastapi import FastAPI, Query, Path, Depends, File, Form, UploadFile, HTTPException, Header, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
 import json
 import pandas as pd
 import io
+from starlette.templating import Jinja2Templates
 
+templates = Jinja2Templates(directory="templates")
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="POIApp",
@@ -74,11 +76,11 @@ async def get_current_active_user(
 
 
 @app.get("/")
-def read_root(current_user: Annotated[schemas.User, Depends(get_current_active_user)]):
-    return current_user
+def read_root(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 
-@app.post("/users/", response_model=schemas.User)
+@app.post("/v1/users/", response_model=schemas.User)
 def create_user(token: Annotated[str | None, Header()], user: schemas.UserCreate, db: Session = Depends(get_db)):
     token_exit = crud.check_supertoken(db=db, token=token)
     if not token_exit:
@@ -91,7 +93,7 @@ def create_user(token: Annotated[str | None, Header()], user: schemas.UserCreate
         return crud.create_user(db=db, user=user)
 
 
-@app.get("/user/get")
+@app.get("/v1/user/get")
 def get_token(email: str, password: str, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email_password(
         db, email=email, password=password)
@@ -110,7 +112,7 @@ def get_token(email: str, password: str, db: Session = Depends(get_db)):
             status_code=400, detail="Email and password did not match or Is not Activate")
 
 
-@app.get("/city/{city_name}")
+@app.get("/v1/city/{city_name}")
 def read_city(city_name: Annotated[str, Path(regex="Yangon", title="We still only accept yangon")]):
     json_file_path = "json/city/yangon.json"
     try:
@@ -125,7 +127,7 @@ def read_city(city_name: Annotated[str, Path(regex="Yangon", title="We still onl
         return {"error": f"An error occurred: {str(e)}"}
 
 
-@app.get("/city/{city_name}/township/{township_name}")
+@app.get("/v1/city/{city_name}/township/{township_name}")
 def read_city_township(city_name: Annotated[str, Path(regex="Yangon", title="We still only accept yangon")], township_name: Union[str, None] = None):
 
     json_file_path = crud.read_township(township_name)
@@ -141,7 +143,7 @@ def read_city_township(city_name: Annotated[str, Path(regex="Yangon", title="We 
         return {"error": f"An error occurred: {str(e)}"}
 
 
-@app.post("/poi", response_model=schemas.PoiCreate)
+@app.post("/v1/poi", response_model=schemas.PoiCreate)
 def create_poi(token: Annotated[str | None, Header()], poi: schemas.PoiCreate, db: Session = Depends(get_db)):
     token_exit = crud.check_supertoken(db=db, token=token)
     if not token_exit:
@@ -151,7 +153,7 @@ def create_poi(token: Annotated[str | None, Header()], poi: schemas.PoiCreate, d
         return crud.create_poi(db=db, poi=poi)
 
 
-@app.get("/poi", response_model=list[schemas.Poi])
+@app.get("/v1/poi", response_model=list[schemas.Poi])
 def read_items(token: Annotated[str | None, Header()],skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     token_exit = crud.get_token(db=db, token=token)
     if not token_exit:
@@ -161,7 +163,7 @@ def read_items(token: Annotated[str | None, Header()],skip: int = 0, limit: int 
         return crud.get_poi(db, skip=skip, limit=limit)
 
 
-@app.post("/poi/search")
+@app.post("/v1/poi/search")
 def read_poi(token: Annotated[str | None, Header()], poi: schemas.PoiSearch, db: Session = Depends(get_db)):
     token_exit = crud.get_token(db=db, token=token)
     if not token_exit:
@@ -171,7 +173,7 @@ def read_poi(token: Annotated[str | None, Header()], poi: schemas.PoiSearch, db:
         return crud.search_poi(db=db, poi=poi)
 
 
-@app.post("/poi/uploadfile")
+@app.post("/v1/poi/uploadfile")
 async def fetch_file(
     token: Annotated[str | None, Header()],file: Annotated[UploadFile, File()], db: Session = Depends(get_db)
 ):
