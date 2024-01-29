@@ -80,7 +80,7 @@ def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
-@app.post("/v1/users/", response_model=schemas.User)
+@app.post("/v1/user/", response_model=schemas.User)
 def create_user(token: Annotated[str | None, Header()], user: schemas.UserCreate, db: Session = Depends(get_db)):
     token_exit = crud.check_supertoken(db=db, token=token)
     if not token_exit:
